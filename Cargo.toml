@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-group = "0.13.0"
 halo2_proofs = "0.3.0"
 zkhash = { git = "https://github.com/KryptonZK/zkfriendlyhashzoo-forked.git" }
 rand = "0.4"
