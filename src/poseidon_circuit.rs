@@ -1,48 +1,50 @@
 use halo2_proofs::{
+    arithmetic::Field,
     circuit::{Layouter, SimpleFloorPlanner, Value},
     pasta::Fp,
-    plonk::{
-        create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Circuit, Column,
-        ConstraintSystem, Error, Instance, SingleVerifier,
-    },
-    poly::commitment::Params,
-    transcript::{Blake2bRead, Blake2bWrite, Challenge255},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 
 use halo2_gadgets::poseidon::{
-    primitives::{self as poseidon, generate_constants, ConstantLength, Mds, Spec},
+    primitives::{generate_constants, ConstantLength, Mds, Spec},
     Hash, Pow5Chip, Pow5Config,
 };
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
+const L: usize = 2;
+
 #[derive(Debug, Clone)]
-struct MyConfig<const WIDTH: usize, const RATE: usize, const L: usize> {
+struct MyConfig<const WIDTH: usize, const RATE: usize> {
     input: [Column<Advice>; L],
     expected: Column<Instance>,
     poseidon_config: Pow5Config<Fp, WIDTH, RATE>,
 }
 
 #[derive(Clone, Copy)]
-struct HashCircuit<S, const WIDTH: usize, const RATE: usize, const L: usize>
+struct HashCircuit<S, const WIDTH: usize, const RATE: usize, const MSGSIZE: usize>
 where
     S: Spec<Fp, WIDTH, RATE> + Clone + Copy,
 {
-    message: Value<[Fp; L]>,
+    message: Value<[Fp; MSGSIZE]>,
+    key: Value<Fp>,
+    nonce: Value<Fp>,
     _spec: PhantomData<S>,
 }
 
-impl<S, const WIDTH: usize, const RATE: usize, const L: usize> Circuit<Fp>
-    for HashCircuit<S, WIDTH, RATE, L>
+impl<S, const WIDTH: usize, const RATE: usize, const MSGSIZE: usize> Circuit<Fp>
+    for HashCircuit<S, WIDTH, RATE, MSGSIZE>
 where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
 {
-    type Config = MyConfig<WIDTH, RATE, L>;
+    type Config = MyConfig<WIDTH, RATE>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
         Self {
             message: Value::unknown(),
+            key: Value::unknown(),
+            nonce: Value::unknown(),
             _spec: PhantomData,
         }
     }
@@ -76,115 +78,125 @@ where
         config: Self::Config,
         mut layouter: impl Layouter<Fp>,
     ) -> Result<(), Error> {
-        let chip = Pow5Chip::construct(config.poseidon_config.clone());
-
-        let message = layouter.assign_region(
-            || "load message",
-            |mut region| {
-                let message_word = |i: usize| {
-                    let value = self.message.map(|message_vals| message_vals[i]);
-                    region.assign_advice(
-                        || format!("load message_{}", i),
-                        config.input[i],
-                        0,
-                        || value,
-                    )
-                };
-
-                let message: Result<Vec<_>, Error> = (0..L).map(message_word).collect();
-                Ok(message?.try_into().unwrap())
-            },
-        )?;
-
+        let chip: Pow5Chip<Fp, WIDTH, RATE> = Pow5Chip::construct(config.poseidon_config.clone());
         let hasher = Hash::<_, _, S, ConstantLength<L>, WIDTH, RATE>::init(
             chip,
             layouter.namespace(|| "init"),
+        )
+        .expect("hasher construction failed");
+
+        let seed_input = layouter.assign_region(
+            || "load message",
+            |mut region| {
+                let key = region.assign_advice(|| "load key", config.input[0], 0, || self.key)?;
+                let nonce =
+                    region.assign_advice(|| "load nonce", config.input[1], 0, || self.nonce)?;
+                Ok([key, nonce])
+            },
         )?;
-        let output = hasher.hash(layouter.namespace(|| "hash"), message)?;
+        let output = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
+
+        // TODO: compute r_i = H(a, i)
+        // TODO: compute enc_i = msg_i + r_i
 
         layouter.constrain_instance(output.cell(), config.expected, 0)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PoseidonSpec<const WIDTH: usize, const RATE: usize>;
+
+impl<const WIDTH: usize, const RATE: usize> Spec<Fp, WIDTH, RATE> for PoseidonSpec<WIDTH, RATE> {
+    fn full_rounds() -> usize {
+        8
+    }
+
+    fn partial_rounds() -> usize {
+        56
+    }
+
+    fn sbox(val: Fp) -> Fp {
+        val.pow_vartime(&[5])
+    }
+
+    fn secure_mds() -> usize {
+        0
+    }
+
+    fn constants() -> (Vec<[Fp; WIDTH]>, Mds<Fp, WIDTH>, Mds<Fp, WIDTH>) {
+        generate_constants::<_, Self, WIDTH, RATE>()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use halo2_proofs::{arithmetic::Field, pasta::{pallas, vesta}};
-    use rand::{thread_rng};
-
-    #[derive(Debug, Clone, Copy)]
-    struct MySpec<const WIDTH: usize, const RATE: usize>;
-
-    impl<const WIDTH: usize, const RATE: usize> Spec<Fp, WIDTH, RATE> for MySpec<WIDTH, RATE> {
-        fn full_rounds() -> usize {
-            8
-        }
-
-        fn partial_rounds() -> usize {
-            56
-        }
-
-        fn sbox(val: Fp) -> Fp {
-            val.pow_vartime(&[5])
-        }
-
-        fn secure_mds() -> usize {
-            0
-        }
-
-        fn constants() -> (Vec<[Fp; WIDTH]>, Mds<Fp, WIDTH>, Mds<Fp, WIDTH>) {
-            generate_constants::<_, Self, WIDTH, RATE>()
-        }
-    }
+    use halo2_gadgets::poseidon::primitives as poseidon;
+    use halo2_proofs::{
+        pasta::{pallas, vesta},
+        plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, SingleVerifier},
+        poly::commitment::Params,
+        transcript::{Blake2bRead, Blake2bWrite, Challenge255},
+    };
 
     const L: usize = 2;
+    const MSGSIZE: usize = 10;
     const WIDTH: usize = 3;
     const RATE: usize = 2;
-    type S = MySpec<WIDTH, RATE>;
+    type S = PoseidonSpec<WIDTH, RATE>;
     const K: u32 = 7;
 
     #[test]
-    fn run_poseidon() {
+    fn run_enc() {
         let mut rng = rand::rngs::OsRng;
 
-        // Initialize the polynomial commitment parameters
+        // Initialize the information for the encryption
         let params: Params<vesta::Affine> = Params::new(K);
 
-        let empty_circuit = HashCircuit::<S, WIDTH, RATE, L> {
-            message: Value::unknown(),
-            _spec: PhantomData,
-        };
-
-        // Initialize the proving key
-        let vk = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
-        let pk = keygen_pk(&params, vk, &empty_circuit).expect("keygen_pk should not fail");
-
-        let prover_name = "test-prover";
-        let verifier_name = "test-verifier";
-
-        let message = (0..L)
+        let message = (0..MSGSIZE)
             .map(|_| pallas::Base::one())
             .collect::<Vec<_>>()
             .try_into()
-            .unwrap();
-        let circuit = HashCircuit::<S, WIDTH, RATE, L> {
+            .expect("array of wrong size");
+        let key = Fp::one();
+        let nonce = Fp::one();
+
+        let circuit = HashCircuit::<S, WIDTH, RATE, MSGSIZE> {
             message: Value::known(message),
+            key: Value::known(key),
+            nonce: Value::known(nonce),
             _spec: PhantomData,
         };
-        let output = poseidon::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init().hash(message);
-        
-        
-         // Create a proof
+
+        let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
+        let pk = keygen_pk(&params, vk, &circuit).expect("keygen_pk should not fail");
+
+        // Compute the encryption
+        let hasher = || poseidon::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init();
+        let a = hasher().hash([key, nonce]);
+        // let output: Vec<Fp> = message
+        //     .into_iter()
+        //     .enumerate()
+        //     .map(|(i, msg_i)| {
+        //         let i_ff = Fp::from_u128(i.try_into().unwrap());
+        //         let r_i = hasher().hash([a, i_ff]);
+        //         msg_i + &r_i
+        //     })
+        //     .collect();
+        let output = [a];
+
+        // Create a proof
         let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
         create_proof(
             &params,
             &pk,
             &[circuit],
-            &[&[&[output]]],
+            &[&[&output]],
             &mut rng,
             &mut transcript,
-        );
-        
+        )
+        .unwrap();
+
         let proof = transcript.finalize();
 
         let strategy = SingleVerifier::new(&params);
@@ -193,8 +205,8 @@ mod tests {
             &params,
             pk.get_vk(),
             strategy,
-            &[&[&[output]]],
-            &mut transcript
+            &[&[&output]],
+            &mut transcript,
         );
         assert!(verify_proof_result.is_ok())
     }
