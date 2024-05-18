@@ -11,6 +11,7 @@ use halo2_gadgets::poseidon::{
 };
 use std::convert::TryInto;
 use std::marker::PhantomData;
+use std::ops::Add;
 
 const L: usize = 2;
 
@@ -86,7 +87,7 @@ where
         .expect("hasher construction failed");
 
         let seed_input = layouter.assign_region(
-            || "load message",
+            || "load key_nonce",
             |mut region| {
                 let key = region.assign_advice(|| "load key", config.input[0], 0, || self.key)?;
                 let nonce =
@@ -95,6 +96,39 @@ where
             },
         )?;
         let a = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
+
+        let message = layouter.assign_region(
+            || "load message",
+            |mut region| {
+                let c_i = region.assign_advice(|| "load message", config.input[0], 0, || self.message)?;
+                Ok(c_i)
+            },
+        )?;
+
+        let acc: Value<[Fp; MSGSIZE]> = Value::known();
+        
+        let mut counter = Value::known(Fp::zero());
+        for _ in 1..=MSGSIZE {
+            let seed_input = layouter.assign_region(
+                || "load message",
+                |mut region| {
+                    let c_i = region.assign_advice(|| "load i", config.input[0], 0, || counter)?;
+                    Ok(c_i)
+                },
+            )?;
+
+            let chip: Pow5Chip<Fp, WIDTH, RATE> = Pow5Chip::construct(config.poseidon_config.clone());
+            let hasher = Hash::<_, _, S, ConstantLength<L>, WIDTH, RATE>::init(
+                chip,
+                layouter.namespace(|| "init"),
+            )
+                .expect("hasher construction failed");
+
+            let temp = hasher.hash(layouter.namespace(|| "hash"), [a.clone(), seed_input])?;
+            counter = counter.add(Value::known(Fp::one()));
+        }
+
+        
 
         // TODO: compute r_i = H(a, i)
         // let i: AssignedCell = ...;
