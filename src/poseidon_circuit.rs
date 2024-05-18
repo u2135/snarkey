@@ -94,12 +94,14 @@ where
                 Ok([key, nonce])
             },
         )?;
-        let output = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
+        let a = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
 
         // TODO: compute r_i = H(a, i)
+        // let i: AssignedCell = ...;
+        // hasher.hash(..., [a, i]);
         // TODO: compute enc_i = msg_i + r_i
 
-        layouter.constrain_instance(output.cell(), config.expected, 0)
+        layouter.constrain_instance(a.cell(), config.expected, 0)
     }
 }
 
