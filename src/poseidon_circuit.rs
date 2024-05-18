@@ -108,7 +108,7 @@ where
         )?;
         let a = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
 
-        let mut counter = Value::known(Fp::one());
+        let mut counter = Value::known(Fp::zero());
         for i in 0..MSGSIZE {
             let seed_input = layouter.assign_region(
                 || "load message",
@@ -193,15 +193,17 @@ mod tests {
     const WIDTH: usize = 3;
     const RATE: usize = 2;
     type S = PoseidonSpec<WIDTH, RATE>;
-    const K: u32 = 17;
+    const K: u32 = 8;
 
     #[test]
     fn run_enc() {
         let mut rng = rand::rngs::OsRng;
 
         // Initialize the information for the encryption
+        println!("params new");
         let params: Params<vesta::Affine> = Params::new(K);
 
+        println!("msg");
         let message = (0..MSGSIZE)
             .map(|_| pallas::Base::one())
             .collect::<Vec<_>>()
@@ -234,6 +236,7 @@ mod tests {
             .collect();
 
         // Create a proof
+        println!("creating proof");
         let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
         create_proof(
             &params,
@@ -246,10 +249,12 @@ mod tests {
         .unwrap();
 
         let proof = transcript.finalize();
+        println!("finished creating proof");
 
         let strategy = SingleVerifier::new(&params);
         let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
-        let verify_proof_result = verify_proof(
+        println!("verifying proof");
+        let verify_proof_result: Result<(), Error> = verify_proof(
             &params,
             pk.get_vk(),
             strategy,

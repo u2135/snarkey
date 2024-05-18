@@ -1,3 +1,5 @@
 mod encrypt;
 
-fn main() {}
+fn main() {
+    // cpazk::poseidon_circuit::tests::run_enc();
+}
