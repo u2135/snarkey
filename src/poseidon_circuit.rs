@@ -184,7 +184,7 @@ mod tests {
     use halo2_proofs::dev::MockProver;
 
     const L: usize = 2;
-    const MSGSIZE: usize = 8;
+    const MSGSIZE: usize = 2;
     const WIDTH: usize = 3;
     const RATE: usize = 2;
     type S = PoseidonSpec<WIDTH, RATE>;
