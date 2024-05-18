@@ -1,11 +1,8 @@
-use std::ops::Add;
 use std::sync::Arc;
 
 use rand::thread_rng;
-use zkhash::ff::{Field, PrimeField};
-use zkhash::fields::bls12::FpBLS12;
+use zkhash::ff::PrimeField;
 use zkhash::reinforced_concrete::reinforced_concrete::ReinforcedConcrete;
-use zkhash::reinforced_concrete::reinforced_concrete_instances::RC_BLS_PARAMS;
 use zkhash::reinforced_concrete::reinforced_concrete_params::ReinforcedConcreteParams;
 use zkhash::utils::random_scalar_rng;
 
@@ -18,6 +15,9 @@ enum Mode {
     Decrypt,
 }
 
+type Plaintext<F> = Vec<F>;
+type Ciphertext<F> = (F, Vec<F>);
+
 impl<F: PrimeField> RCEnc<F> {
     fn new(params: &Arc<ReinforcedConcreteParams<F>>) -> Self {
         Self {
@@ -25,16 +25,17 @@ impl<F: PrimeField> RCEnc<F> {
         }
     }
 
-    fn encrypt(&self, message: Vec<F>, key: F) -> (F, Vec<F>) {
+    fn encrypt(&self, key: F, plaintext: Plaintext<F>) -> Ciphertext<F> {
         let nonce = random_scalar_rng::<F, _>(false, &mut thread_rng());
-        self.encdec(message, nonce, key, Mode::Encrypt)
+        self.encdec(key, nonce, plaintext, Mode::Encrypt)
     }
 
-    fn decrypt(&self, message: Vec<F>, nonce: F, key: F) -> Vec<F> {
-        self.encdec(message, nonce, key, Mode::Decrypt).1
+    fn decrypt(&self, key: F, ciphertext: Ciphertext<F>) -> Plaintext<F> {
+        let (nonce, message) = ciphertext;
+        self.encdec(key, nonce, message, Mode::Decrypt).1
     }
 
-    fn encdec(&self, message: Vec<F>, nonce: F, key: F, mode: Mode) -> (F, Vec<F>) {
+    fn encdec(&self, key: F, nonce: F, message: Vec<F>, mode: Mode) -> (F, Vec<F>) {
         let a = self.rc.hash(&nonce, &key);
 
         let res = message
@@ -74,6 +75,10 @@ impl<F: PrimeField> RCEnc<F> {
 
 #[cfg(test)]
 mod tests {
+    use zkhash::{
+        fields::bls12::FpBLS12, reinforced_concrete::reinforced_concrete_instances::RC_BLS_PARAMS,
+    };
+
     use super::*;
     #[test]
     fn test() {
@@ -82,8 +87,8 @@ mod tests {
 
         let rcenc = RCEnc::new(&RC_BLS_PARAMS);
 
-        let (nonce, enc) = rcenc.encrypt(message.clone(), key);
-        let dec = rcenc.decrypt(enc, nonce, key);
+        let ct = rcenc.encrypt(key, message.clone());
+        let dec = rcenc.decrypt(key, ct);
         assert_eq!(message, dec)
     }
 }
