@@ -109,8 +109,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use halo2_proofs::{arithmetic::Field, pasta::pallas};
-    use rand::OsRng;
+    use halo2_proofs::{arithmetic::Field, pasta::{pallas, vesta}};
+    use rand::{thread_rng};
 
     #[derive(Debug, Clone, Copy)]
     struct MySpec<const WIDTH: usize, const RATE: usize>;
@@ -138,12 +138,30 @@ mod tests {
     }
 
     const L: usize = 2;
-    const WIDTH: usize = 2;
-    const RATE: usize = 3;
+    const WIDTH: usize = 3;
+    const RATE: usize = 2;
     type S = MySpec<WIDTH, RATE>;
+    const K: u32 = 7;
 
     #[test]
     fn run_poseidon() {
+        let mut rng = rand::rngs::OsRng;
+
+        // Initialize the polynomial commitment parameters
+        let params: Params<vesta::Affine> = Params::new(K);
+
+        let empty_circuit = HashCircuit::<S, WIDTH, RATE, L> {
+            message: Value::unknown(),
+            _spec: PhantomData,
+        };
+
+        // Initialize the proving key
+        let vk = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
+        let pk = keygen_pk(&params, vk, &empty_circuit).expect("keygen_pk should not fail");
+
+        let prover_name = "test-prover";
+        let verifier_name = "test-verifier";
+
         let message = (0..L)
             .map(|_| pallas::Base::one())
             .collect::<Vec<_>>()
@@ -153,5 +171,31 @@ mod tests {
             message: Value::known(message),
             _spec: PhantomData,
         };
+        let output = poseidon::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init().hash(message);
+        
+        
+         // Create a proof
+        let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+        create_proof(
+            &params,
+            &pk,
+            &[circuit],
+            &[&[&[output]]],
+            &mut rng,
+            &mut transcript,
+        );
+        
+        let proof = transcript.finalize();
+
+        let strategy = SingleVerifier::new(&params);
+        let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+        let verify_proof_result = verify_proof(
+            &params,
+            pk.get_vk(),
+            strategy,
+            &[&[&[output]]],
+            &mut transcript
+        );
+        assert!(verify_proof_result.is_ok())
     }
 }
