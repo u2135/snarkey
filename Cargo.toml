@@ -8,3 +8,5 @@ halo2_proofs = "0.3.0"
 zkhash = { git = "https://github.com/KryptonZK/zkfriendlyhashzoo-forked.git" }
 rand = "0.4"
 serde = { version = "1.0.202", features = ["serde_derive"] }
+halo2_gadgets = "0.3.0"
+group = "0.13.0"
