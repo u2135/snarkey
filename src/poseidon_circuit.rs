@@ -13,13 +13,16 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::ops::Add;
 
+use crate::add_chip::{AddChip, AddConfig, AddInstruction};
+
 const L: usize = 2;
 
 #[derive(Debug, Clone)]
-struct MyConfig<const WIDTH: usize, const RATE: usize> {
+struct MyConfig<const WIDTH: usize, const RATE: usize, const MSGSIZE: usize> {
     input: [Column<Advice>; L],
-    expected: Column<Instance>,
+    expected: [Column<Instance>; MSGSIZE],
     poseidon_config: Pow5Config<Fp, WIDTH, RATE>,
+    add_config: AddConfig,
 }
 
 #[derive(Clone, Copy)]
@@ -38,7 +41,7 @@ impl<S, const WIDTH: usize, const RATE: usize, const MSGSIZE: usize> Circuit<Fp>
 where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
 {
-    type Config = MyConfig<WIDTH, RATE>;
+    type Config = MyConfig<WIDTH, RATE, MSGSIZE>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -52,8 +55,15 @@ where
 
     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
         let state = (0..WIDTH).map(|_| meta.advice_column()).collect::<Vec<_>>();
-        let expected = meta.instance_column();
-        meta.enable_equality(expected);
+        let expected = (0..MSGSIZE)
+            .map(|_| {
+                let col = meta.instance_column();
+                meta.enable_equality(col);
+                col
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("array size invalid");
         let partial_sbox = meta.advice_column();
 
         let rc_a = (0..WIDTH).map(|_| meta.fixed_column()).collect::<Vec<_>>();
@@ -64,6 +74,7 @@ where
         Self::Config {
             input: state[..RATE].try_into().unwrap(),
             expected,
+            add_config: AddChip::configure(meta, state[0], state[1], state[2]),
             poseidon_config: Pow5Chip::configure::<S>(
                 meta,
                 state.try_into().unwrap(),
@@ -97,18 +108,8 @@ where
         )?;
         let a = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
 
-        let message = layouter.assign_region(
-            || "load message",
-            |mut region| {
-                let c_i = region.assign_advice(|| "load message", config.input[0], 0, || self.message)?;
-                Ok(c_i)
-            },
-        )?;
-
-        let acc: Value<[Fp; MSGSIZE]> = Value::known();
-        
-        let mut counter = Value::known(Fp::zero());
-        for _ in 1..=MSGSIZE {
+        let mut counter = Value::known(Fp::one());
+        for i in 0..MSGSIZE {
             let seed_input = layouter.assign_region(
                 || "load message",
                 |mut region| {
@@ -117,25 +118,36 @@ where
                 },
             )?;
 
-            let chip: Pow5Chip<Fp, WIDTH, RATE> = Pow5Chip::construct(config.poseidon_config.clone());
+            let chip: Pow5Chip<Fp, WIDTH, RATE> =
+                Pow5Chip::construct(config.poseidon_config.clone());
             let hasher = Hash::<_, _, S, ConstantLength<L>, WIDTH, RATE>::init(
                 chip,
                 layouter.namespace(|| "init"),
             )
-                .expect("hasher construction failed");
+            .expect("hasher construction failed");
 
-            let temp = hasher.hash(layouter.namespace(|| "hash"), [a.clone(), seed_input])?;
+            let r_i = hasher.hash(layouter.namespace(|| "hash"), [a.clone(), seed_input])?;
+
+            let msg_i: Value<Fp> = self.message.map(|vals| vals[i]);
+            let msg_i = layouter.assign_region(
+                || "load msg_i",
+                |mut region| {
+                    let c_i = region.assign_advice(|| "load i", config.input[0], 0, || msg_i)?;
+                    Ok(c_i)
+                },
+            )?;
+            let chip = AddChip::construct(config.add_config.clone());
+            let res_i = chip.add(&mut layouter, &msg_i, &r_i)?;
+
+            layouter.constrain_instance(res_i.cell(), config.expected[i], 0)?;
             counter = counter.add(Value::known(Fp::one()));
         }
 
-        
-
+        Ok(())
         // TODO: compute r_i = H(a, i)
         // let i: AssignedCell = ...;
         // hasher.hash(..., [a, i]);
         // TODO: compute enc_i = msg_i + r_i
-
-        layouter.constrain_instance(a.cell(), config.expected, 0)
     }
 }
 
@@ -167,6 +179,7 @@ impl<const WIDTH: usize, const RATE: usize> Spec<Fp, WIDTH, RATE> for PoseidonSp
 #[cfg(test)]
 mod tests {
     use super::*;
+    use group::ff::PrimeField;
     use halo2_gadgets::poseidon::primitives as poseidon;
     use halo2_proofs::{
         pasta::{pallas, vesta},
@@ -176,11 +189,11 @@ mod tests {
     };
 
     const L: usize = 2;
-    const MSGSIZE: usize = 10;
+    const MSGSIZE: usize = 2;
     const WIDTH: usize = 3;
     const RATE: usize = 2;
     type S = PoseidonSpec<WIDTH, RATE>;
-    const K: u32 = 7;
+    const K: u32 = 17;
 
     #[test]
     fn run_enc() {
@@ -210,16 +223,15 @@ mod tests {
         // Compute the encryption
         let hasher = || poseidon::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init();
         let a = hasher().hash([key, nonce]);
-        // let output: Vec<Fp> = message
-        //     .into_iter()
-        //     .enumerate()
-        //     .map(|(i, msg_i)| {
-        //         let i_ff = Fp::from_u128(i.try_into().unwrap());
-        //         let r_i = hasher().hash([a, i_ff]);
-        //         msg_i + &r_i
-        //     })
-        //     .collect();
-        let output = [a];
+        let output: Vec<Fp> = message
+            .into_iter()
+            .enumerate()
+            .map(|(i, msg_i)| {
+                let i_ff = Fp::from_u128(i.try_into().unwrap());
+                let r_i = hasher().hash([a, i_ff]);
+                msg_i + &r_i
+            })
+            .collect();
 
         // Create a proof
         let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
@@ -244,6 +256,6 @@ mod tests {
             &[&[&output]],
             &mut transcript,
         );
-        assert!(verify_proof_result.is_ok())
+        verify_proof_result.expect("verification should pass")
     }
 }
