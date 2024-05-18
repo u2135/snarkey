@@ -2,16 +2,13 @@ use std::marker::PhantomData;
 
 use cpazk::poseidon_circuit::{HashCircuit, PoseidonSpec};
 use criterion::{criterion_group, criterion_main, Criterion};
-use group::ff::Field;
-use halo2_gadgets::poseidon::primitives::{ConstantLength, Spec};
+use group::ff::PrimeField;
+use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, Spec};
 use halo2_proofs::{
     circuit::Value,
-    pasta::{pallas, vesta, Fp},
-    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, SingleVerifier},
-    poly::commitment::Params,
-    transcript::{Blake2bRead, Blake2bWrite, Challenge255},
+    pasta::Fp,
 };
-use rand::rngs::OsRng;
+use halo2_proofs::dev::MockProver;
 
 const K: u32 = 7;
 
@@ -21,96 +18,65 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
 ) where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
 {
-    // Initialize the polynomial commitment parameters
-    let params: Params<vesta::Affine> = Params::new(K);
 
-    let empty_circuit = HashCircuit::<S, WIDTH, RATE, L> {
-        message: Value::unknown(),
+    let message = (0..L)
+        .map(|_| Fp::one())
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("array of wrong size");
+
+    let key = Fp::one();
+    let nonce = Fp::one();
+
+    let circuit = HashCircuit::<S, WIDTH, RATE, L> {
+        message: Value::known(message),
+        key: Value::known(key),
+        nonce: Value::known(nonce),
         _spec: PhantomData,
-        key: Value::unknown(),
-        nonce: Value::unknown(),
     };
 
-    // Initialize the proving key
-    let vk = keygen_vk(&params, &empty_circuit).expect("keygen_vk should not fail");
-    let pk = keygen_pk(&params, vk, &empty_circuit).expect("keygen_pk should not fail");
+    let mut input: [Fp; L] = [Fp::one(); L];
+    input[0] = key;
+    input[1] = nonce;
+
+    let hasher = || Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init();
+    let a = hasher().hash(input);
+
+    let output: Vec<_> = message
+        .into_iter()
+        .enumerate()
+        .map(|(i, msg_i)| {
+            let i_ff = Fp::from_u128(i.try_into().unwrap());
+            let mut input: [Fp; L] = [Fp::one(); L];
+            input[0] = a;
+            input[1] = i_ff;
+            let r_i = hasher().hash(input);
+            vec![msg_i + &r_i]
+        })
+        .collect();
 
     let prover_name = name.to_string() + "-prover";
     let verifier_name = name.to_string() + "-verifier";
 
-    let mut rng = OsRng;
-    let message = (0..L)
-        .map(|_| pallas::Base::random(rng))
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
-
-    // TODO: CHECK THE PART BELOW
-    let mut input: [Fp; L] = [Fp::one(); L];
-    let key = Fp::one();
-    let nonce = Fp::one();
-    input[0] = key;
-    input[1] = nonce;
-    let hasher = || {
-        halo2_gadgets::poseidon::primitives::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init()
-    };
-    let output = hasher().hash(input);
-
-    let circuit = HashCircuit::<S, WIDTH, RATE, L> {
-        message: Value::known(message),
-        _spec: PhantomData,
-        key: Value::known(key),
-        nonce: Value::known(nonce),
-    };
-
     c.bench_function(&prover_name, |b| {
         b.iter(|| {
-            let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-            create_proof(
-                &params,
-                &pk,
-                &[circuit],
-                &[&[&[output]]],
-                &mut rng,
-                &mut transcript,
-            )
-            .expect("proof generation should not fail")
+            MockProver::run(K, &circuit, output.clone()).unwrap();
         })
     });
 
     // Create a proof
-    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-    create_proof(
-        &params,
-        &pk,
-        &[circuit],
-        &[&[&[output]]],
-        &mut rng,
-        &mut transcript,
-    )
-    .expect("proof generation should not fail");
-    let proof = transcript.finalize();
-
+    let prover = MockProver::run(K, &circuit, output).unwrap();
     c.bench_function(&verifier_name, |b| {
         b.iter(|| {
-            let strategy = SingleVerifier::new(&params);
-            let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
-            assert!(verify_proof(
-                &params,
-                pk.get_vk(),
-                strategy,
-                &[&[&[output]]],
-                &mut transcript
-            )
-            .is_ok());
+            prover.verify().is_ok()
         });
     });
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2>("WIDTH = 3, RATE = 2", c);
-    bench_poseidon::<PoseidonSpec<9, 8>, 9, 8, 2>("WIDTH = 9, RATE = 8", c);
-    bench_poseidon::<PoseidonSpec<12, 11>, 12, 11, 2>("WIDTH = 12, RATE = 11", c);
+    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2>("MSGSIZE = 2, K = 8", c);
+    bench_poseidon::<PoseidonSpec<9, 8>, 9, 8, 2>("MSGSIZE = 9, K = 8", c);
+    bench_poseidon::<PoseidonSpec<12, 11>, 12, 11, 2>("MSGSIZE = 12, K = 11", c);
 }
 
 criterion_group!(benches, criterion_benchmark);
