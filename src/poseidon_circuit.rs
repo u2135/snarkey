@@ -18,7 +18,7 @@ use crate::add_chip::{AddChip, AddConfig, AddInstruction};
 const L: usize = 2;
 
 #[derive(Debug, Clone)]
-struct MyConfig<const WIDTH: usize, const RATE: usize, const MSGSIZE: usize> {
+pub struct MyConfig<const WIDTH: usize, const RATE: usize, const MSGSIZE: usize> {
     input: [Column<Advice>; L],
     expected: [Column<Instance>; MSGSIZE],
     poseidon_config: Pow5Config<Fp, WIDTH, RATE>,
@@ -26,14 +26,14 @@ struct MyConfig<const WIDTH: usize, const RATE: usize, const MSGSIZE: usize> {
 }
 
 #[derive(Clone, Copy)]
-struct HashCircuit<S, const WIDTH: usize, const RATE: usize, const MSGSIZE: usize>
+pub struct HashCircuit<S, const WIDTH: usize, const RATE: usize, const MSGSIZE: usize>
 where
     S: Spec<Fp, WIDTH, RATE> + Clone + Copy,
 {
-    message: Value<[Fp; MSGSIZE]>,
-    key: Value<Fp>,
-    nonce: Value<Fp>,
-    _spec: PhantomData<S>,
+    pub message: Value<[Fp; MSGSIZE]>,
+    pub key: Value<Fp>,
+    pub nonce: Value<Fp>,
+    pub _spec: PhantomData<S>,
 }
 
 impl<S, const WIDTH: usize, const RATE: usize, const MSGSIZE: usize> Circuit<Fp>
@@ -152,7 +152,7 @@ where
 }
 
 #[derive(Debug, Clone, Copy)]
-struct PoseidonSpec<const WIDTH: usize, const RATE: usize>;
+pub struct PoseidonSpec<const WIDTH: usize, const RATE: usize>;
 
 impl<const WIDTH: usize, const RATE: usize> Spec<Fp, WIDTH, RATE> for PoseidonSpec<WIDTH, RATE> {
     fn full_rounds() -> usize {

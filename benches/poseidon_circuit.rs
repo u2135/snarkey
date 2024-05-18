@@ -3,8 +3,14 @@ use std::marker::PhantomData;
 use cpazk::poseidon_circuit::{HashCircuit, PoseidonSpec};
 use criterion::{criterion_group, criterion_main, Criterion};
 use group::ff::Field;
-use halo2_gadgets::poseidon::{self, primitives::{ConstantLength, Spec}, Hash};
-use halo2_proofs::{circuit::Value, pasta::{pallas, vesta, Fp}, plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, SingleVerifier}, poly::commitment::Params, transcript::{Blake2bRead, Blake2bWrite, Challenge255}};
+use halo2_gadgets::poseidon::primitives::{ConstantLength, Spec};
+use halo2_proofs::{
+    circuit::Value,
+    pasta::{pallas, vesta, Fp},
+    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, SingleVerifier},
+    poly::commitment::Params,
+    transcript::{Blake2bRead, Blake2bWrite, Challenge255},
+};
 use rand::rngs::OsRng;
 
 const K: u32 = 7;
@@ -45,7 +51,9 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
     let nonce = Fp::one();
     input[0] = key;
     input[1] = nonce;
-    let hasher = || halo2_gadgets::poseidon::primitives::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init();
+    let hasher = || {
+        halo2_gadgets::poseidon::primitives::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init()
+    };
     let output = hasher().hash(input);
 
     let circuit = HashCircuit::<S, WIDTH, RATE, L> {
