@@ -10,7 +10,8 @@ use halo2_proofs::{
 };
 use halo2_proofs::dev::MockProver;
 
-const K: u32 = 7;
+const K: u32 = 8;
+const MSGSIZE: usize = 1;
 
 fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
     name: &str,
@@ -18,8 +19,7 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
 ) where
     S: Spec<Fp, WIDTH, RATE> + Copy + Clone,
 {
-
-    let message = (0..L)
+    let message = (0..MSGSIZE)
         .map(|_| Fp::one())
         .collect::<Vec<_>>()
         .try_into()
@@ -28,7 +28,7 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
     let key = Fp::one();
     let nonce = Fp::one();
 
-    let circuit = HashCircuit::<S, WIDTH, RATE, L> {
+    let circuit = HashCircuit::<S, WIDTH, RATE, MSGSIZE> {
         message: Value::known(message),
         key: Value::known(key),
         nonce: Value::known(nonce),
@@ -74,9 +74,7 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2>("MSGSIZE = 2, K = 8", c);
-    bench_poseidon::<PoseidonSpec<9, 8>, 9, 8, 2>("MSGSIZE = 9, K = 8", c);
-    bench_poseidon::<PoseidonSpec<12, 11>, 12, 11, 2>("MSGSIZE = 12, K = 11", c);
+    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2>("MSGSIZE = 1, K = 8", c);
 }
 
 criterion_group!(benches, criterion_benchmark);
