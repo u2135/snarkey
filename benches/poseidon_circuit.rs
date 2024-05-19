@@ -1,16 +1,12 @@
 use std::marker::PhantomData;
 
-use cpazk::poseidon_circuit::{HashCircuit, PoseidonSpec};
 use criterion::{criterion_group, criterion_main, Criterion};
 use either::Either;
 use group::ff::PrimeField;
 use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, Spec};
-use halo2_proofs::{
-    circuit::Value,
-    pasta::Fp,
-};
 use halo2_proofs::dev::MockProver;
-
+use halo2_proofs::{circuit::Value, pasta::Fp};
+use snarkey::poseidon_circuit::{HashCircuit, PoseidonSpec};
 
 const K: u32 = 8;
 
@@ -52,7 +48,7 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize, cons
             let mut input: [Fp; L] = [Fp::one(); L];
             input[0] = a;
             input[1] = i_ff;
-            
+
             let r_i = hasher().hash(input);
             msg_i + &r_i
         }))
@@ -71,9 +67,7 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize, cons
     // Create a proof
     let prover = MockProver::run(K, &circuit, output).unwrap();
     c.bench_function(&verifier_name, |b| {
-        b.iter(|| {
-            prover.verify().is_ok()
-        });
+        b.iter(|| prover.verify().is_ok());
     });
 }
 
