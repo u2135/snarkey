@@ -108,43 +108,57 @@ where
         )?;
         let a = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
 
-        for i in 0..MSGSIZE {
-            let counter = Fp::from_u128(i.try_into().unwrap());
-            let seed_input = layouter.assign_region(
-                || "load message",
-                |mut region| {
-                    let c_i = region.assign_advice_from_constant(
-                        || "load i",
-                        config.input[0],
-                        0,
-                        counter,
-                    )?;
-                    Ok(c_i)
-                },
-            )?;
-
-            let chip: Pow5Chip<Fp, WIDTH, RATE> =
-                Pow5Chip::construct(config.poseidon_config.clone());
-            let hasher = Hash::<_, _, S, ConstantLength<L>, WIDTH, RATE>::init(
-                chip,
-                layouter.namespace(|| "init"),
-            )
-            .expect("hasher construction failed");
-
-            let r_i = hasher.hash(layouter.namespace(|| "hash"), [a.clone(), seed_input])?;
-
+        if MSGSIZE == 1 {
+            let i = 0;
             let msg_i: Value<Fp> = self.message.map(|vals| vals[i]);
             let msg_i = layouter.assign_region(
-                || "load msg_i",
-                |mut region| {
-                    let c_i = region.assign_advice(|| "load i", config.input[0], 0, || msg_i)?;
-                    Ok(c_i)
-                },
+                || "load msg_0",
+                |mut region| region.assign_advice(|| "load i", config.input[0], 0, || msg_i),
             )?;
-            let chip = AddChip::construct(config.add_config.clone());
-            let res_i = chip.add(&mut layouter, &msg_i, &r_i)?;
 
-            layouter.constrain_instance(res_i.cell(), config.expected[i], 0)?;
+            let chip = AddChip::construct(config.add_config.clone());
+            let res = chip.add(&mut layouter, &msg_i, &a)?;
+            layouter.constrain_instance(res.cell(), config.expected[i], 0)?;
+        } else {
+            for i in 0..MSGSIZE {
+                let counter = Fp::from_u128(i.try_into().unwrap());
+                let seed_input = layouter.assign_region(
+                    || "load message",
+                    |mut region| {
+                        let c_i = region.assign_advice_from_constant(
+                            || "load i",
+                            config.input[0],
+                            0,
+                            counter,
+                        )?;
+                        Ok(c_i)
+                    },
+                )?;
+
+                let chip: Pow5Chip<Fp, WIDTH, RATE> =
+                    Pow5Chip::construct(config.poseidon_config.clone());
+                let hasher = Hash::<_, _, S, ConstantLength<L>, WIDTH, RATE>::init(
+                    chip,
+                    layouter.namespace(|| "init"),
+                )
+                .expect("hasher construction failed");
+
+                let r_i = hasher.hash(layouter.namespace(|| "hash"), [a.clone(), seed_input])?;
+
+                let msg_i: Value<Fp> = self.message.map(|vals| vals[i]);
+                let msg_i = layouter.assign_region(
+                    || "load msg_i",
+                    |mut region| {
+                        let c_i =
+                            region.assign_advice(|| "load i", config.input[0], 0, || msg_i)?;
+                        Ok(c_i)
+                    },
+                )?;
+                let chip = AddChip::construct(config.add_config.clone());
+                let res_i = chip.add(&mut layouter, &msg_i, &r_i)?;
+
+                layouter.constrain_instance(res_i.cell(), config.expected[i], 0)?;
+            }
         }
 
         Ok(())
@@ -183,12 +197,13 @@ impl<const WIDTH: usize, const RATE: usize> Spec<Fp, WIDTH, RATE> for PoseidonSp
 #[cfg(test)]
 mod tests {
     use super::*;
+    use either::Either;
     use group::ff::PrimeField;
     use halo2_gadgets::poseidon::primitives as poseidon;
     use halo2_proofs::dev::MockProver;
 
     const L: usize = 2;
-    const MSGSIZE: usize = 2;
+    const MSGSIZE: usize = 1;
     const WIDTH: usize = 3;
     const RATE: usize = 2;
     type S = PoseidonSpec<WIDTH, RATE>;
@@ -215,15 +230,18 @@ mod tests {
         // Compute the encryption
         let hasher = || poseidon::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init();
         let a = hasher().hash([key, nonce]);
-        let output: Vec<_> = message
-            .into_iter()
-            .enumerate()
-            .map(|(i, msg_i)| {
+        let output = if message.len() == 1 {
+            Either::Left(message.map(|val| val + a).into_iter())
+        } else {
+            Either::Right(message.into_iter().enumerate().map(|(i, msg_i)| {
                 let i_ff = Fp::from_u128(i.try_into().unwrap());
                 let r_i = hasher().hash([a, i_ff]);
-                vec![msg_i + &r_i]
-            })
-            .collect();
+                msg_i + &r_i
+            }))
+        };
+
+        // instance is of the form [[col1_inst1, col1_inst2, ...], [col2_inst1, col2_inst2], ...]
+        let output = output.map(|val| vec![val]).collect();
 
         // Create a proof
         println!("creating proof");
