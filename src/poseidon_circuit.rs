@@ -127,7 +127,7 @@ where
                     |mut region| {
                         let c_i = region.assign_advice_from_constant(
                             || "load i",
-                            config.input[0],
+                            config.input[1],
                             0,
                             counter,
                         )?;
@@ -150,7 +150,7 @@ where
                     || "load msg_i",
                     |mut region| {
                         let c_i =
-                            region.assign_advice(|| "load i", config.input[0], 0, || msg_i)?;
+                            region.assign_advice(|| "load i", config.input[1], 0, || msg_i)?;
                         Ok(c_i)
                     },
                 )?;
