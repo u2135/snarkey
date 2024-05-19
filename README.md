@@ -1,1 +1,2 @@
-# zkhack24
+# SNARKey
+CPA-secure zk-friendly encryption
