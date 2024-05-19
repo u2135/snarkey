@@ -119,7 +119,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 1>("MSGSIZE = 1, K = 8", c);
     bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 2>("MSGSIZE = 2, K = 8", c);
     bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 3>("MSGSIZE = 3, K = 8", c);
-    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 4>("MSGSIZE = 1, K = 8", c);
+    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 4>("MSGSIZE = 4, K = 8", c);
 }
 
 criterion_group!(benches, criterion_benchmark);
