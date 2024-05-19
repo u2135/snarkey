@@ -1,3 +1,4 @@
+use group::ff::PrimeField;
 use halo2_proofs::{
     arithmetic::Field,
     circuit::{Layouter, SimpleFloorPlanner, Value},
@@ -11,7 +12,6 @@ use halo2_gadgets::poseidon::{
 };
 use std::convert::TryInto;
 use std::marker::PhantomData;
-use std::ops::Add;
 
 use crate::add_chip::{AddChip, AddConfig, AddInstruction};
 
@@ -108,12 +108,17 @@ where
         )?;
         let a = hasher.hash(layouter.namespace(|| "hash"), seed_input)?;
 
-        let mut counter = Value::known(Fp::zero());
         for i in 0..MSGSIZE {
+            let counter = Fp::from_u128(i.try_into().unwrap());
             let seed_input = layouter.assign_region(
                 || "load message",
                 |mut region| {
-                    let c_i = region.assign_advice(|| "load i", config.input[0], 0, || counter)?;
+                    let c_i = region.assign_advice_from_constant(
+                        || "load i",
+                        config.input[0],
+                        0,
+                        counter,
+                    )?;
                     Ok(c_i)
                 },
             )?;
@@ -140,7 +145,6 @@ where
             let res_i = chip.add(&mut layouter, &msg_i, &r_i)?;
 
             layouter.constrain_instance(res_i.cell(), config.expected[i], 0)?;
-            counter = counter.add(Value::known(Fp::one()));
         }
 
         Ok(())
