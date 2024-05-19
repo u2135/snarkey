@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use cpazk::poseidon_circuit::{HashCircuit, PoseidonSpec};
 use criterion::{criterion_group, criterion_main, Criterion};
+use either::Either;
 use group::ff::PrimeField;
 use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, Spec};
 use halo2_proofs::{
@@ -10,10 +11,10 @@ use halo2_proofs::{
 };
 use halo2_proofs::dev::MockProver;
 
-const K: u32 = 8;
-const MSGSIZE: usize = 1;
 
-fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
+const K: u32 = 8;
+
+fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize, const MSGSIZE: usize>(
     name: &str,
     c: &mut Criterion,
 ) where
@@ -42,18 +43,21 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
     let hasher = || Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init();
     let a = hasher().hash(input);
 
-    let output: Vec<_> = message
-        .into_iter()
-        .enumerate()
-        .map(|(i, msg_i)| {
+    let output = if message.len() == 1 {
+        Either::Left(message.map(|val| val + a).into_iter())
+    } else {
+        Either::Right(message.into_iter().enumerate().map(|(i, msg_i)| {
             let i_ff = Fp::from_u128(i.try_into().unwrap());
+
             let mut input: [Fp; L] = [Fp::one(); L];
             input[0] = a;
             input[1] = i_ff;
+            
             let r_i = hasher().hash(input);
-            vec![msg_i + &r_i]
-        })
-        .collect();
+            msg_i + &r_i
+        }))
+    };
+    let output: Vec<Vec<Fp>> = output.map(|val| vec![val]).collect();
 
     let prover_name = name.to_string() + "-prover";
     let verifier_name = name.to_string() + "-verifier";
@@ -74,7 +78,10 @@ fn bench_poseidon<S, const WIDTH: usize, const RATE: usize, const L: usize>(
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2>("MSGSIZE = 1, K = 8", c);
+    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 1>("MSGSIZE = 1, K = 8", c);
+    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 2>("MSGSIZE = 2, K = 8", c);
+    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 3>("MSGSIZE = 3, K = 8", c);
+    bench_poseidon::<PoseidonSpec<3, 2>, 3, 2, 2, 4>("MSGSIZE = 1, K = 8", c);
 }
 
 criterion_group!(benches, criterion_benchmark);
