@@ -16,3 +16,5 @@ In the general case of encrypting a vector $m \in \mathbb{F}^n, k \in \mathbb{F}
 3. For $i := 1, \dots, n$, compute $\mathsf{pad}_i := H(\mathsf{seed}, i)$
 4. Output the ciphertext $\left(\mathsf{pad}_1 + m_1, \dots, \mathsf{pad}_n + m_n\right)$
 
+This algorithm is very similar to the one published by [AlephZero](https://docs.alephzero.org/aleph-zero/protocol-details/shielder/snark-friendly-symmetric-encryption), 
+however, we arrived at it independently.
