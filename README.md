@@ -10,7 +10,7 @@ To compute $\mathsf{Enc}(k, m)$, where $k \in \mathbb{F}, m \in \mathbb{F}$:
 2. Compute $\mathsf{pad} := H(k, \mathsf{nonce})$
 3. Output the ciphertext $\mathsf{pad} + m$
 
-In the general case of encrypting a vector $m \in \mathbb{F}^n$:
+In the general case of encrypting a vector $m \in \mathbb{F}^n, k \in \mathbb{F}$, we define $\mathsf{Enc}(k,m)$ in the following way:
 1. Sample $\mathsf{nonce} \leftarrow_\\$ \mathbb{F}$
 2. Compute $\mathsf{seed} := H(k, \mathsf{nonce})$
 3. For $i := 1, \dots, n$, compute $\mathsf{pad}_i := H(\mathsf{seed}, i)$
