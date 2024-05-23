@@ -1,5 +1,5 @@
 # SNARKey
-CPA-secure zk-friendly encryption
+CPA-secure zk-friendly encryption, developed during ZK Hack Kraków 2024.
 
 ## Encryption algorithm
 We base the algorithm on the assumption that the zk-friendly hash function Poseidon is pseudorandom. 
