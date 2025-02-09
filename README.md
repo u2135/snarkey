@@ -1,3 +1,12 @@
+# Winner of the AlephZero hacker track at ZK Hack Krakow 2024
+https://www.zkkrakow.com/
+https://devfolio.co/projects/snarkey-77dd
+https://zk-hack-krakow.devfolio.co/projects
+https://zk-hack-krakow.devfolio.co/prizes?partner=Aleph+Zero
+
+
+In-circuit data encryption: In the context of privacy systems with anonymity revokers (see for instance this [example] (https://docs.alephzero.org/aleph-zero/protocol-details/shielder/anonymity-revokers)) one must provide encryptions of in-circuit witnesses, thus really implement in-circuit encryption. In this bounty we would like you to implement and benchmark a symmetric encryption scheme as a Halo2 circuit. An example basic design is provided here in [this doc] (https://docs.alephzero.org/aleph-zero/protocol-details/shielder/snark-friendly-symmetric-encryption), and other useful resources include this [paper] (https://eprint.iacr.org/2023/520.pdf),  and this [blog article] (https://blog.taceo.io/how-to-choose-your-zk-friendly-hash-function/).
+
 # SNARKey
 CPA-secure zk-friendly encryption, developed during ZK Hack Kraków 2024.
 
