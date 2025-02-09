@@ -5,7 +5,7 @@ https://zk-hack-krakow.devfolio.co/projects
 https://zk-hack-krakow.devfolio.co/prizes?partner=Aleph+Zero
 
 
-In-circuit data encryption: In the context of privacy systems with anonymity revokers (see for instance this [example] (https://docs.alephzero.org/aleph-zero/protocol-details/shielder/anonymity-revokers)) one must provide encryptions of in-circuit witnesses, thus really implement in-circuit encryption. In this bounty we would like you to implement and benchmark a symmetric encryption scheme as a Halo2 circuit. An example basic design is provided here in [this doc] (https://docs.alephzero.org/aleph-zero/protocol-details/shielder/snark-friendly-symmetric-encryption), and other useful resources include this [paper] (https://eprint.iacr.org/2023/520.pdf),  and this [blog article] (https://blog.taceo.io/how-to-choose-your-zk-friendly-hash-function/).
+In-circuit data encryption: In the context of privacy systems with anonymity revokers (see for instance this [example](https://docs.alephzero.org/aleph-zero/protocol-details/shielder/anonymity-revokers)) one must provide encryptions of in-circuit witnesses, thus really implement in-circuit encryption. In this bounty we would like you to implement and benchmark a symmetric encryption scheme as a Halo2 circuit. An example basic design is provided here in [this doc](https://docs.alephzero.org/aleph-zero/protocol-details/shielder/snark-friendly-symmetric-encryption), and other useful resources include this [paper](https://eprint.iacr.org/2023/520.pdf), and this [blog article](https://blog.taceo.io/how-to-choose-your-zk-friendly-hash-function/).
 
 # SNARKey
 CPA-secure zk-friendly encryption, developed during ZK Hack Kraków 2024.
@@ -25,5 +25,4 @@ In the general case of encrypting a vector $m \in \mathbb{F}^n, k \in \mathbb{F}
 3. For $i := 1, \dots, n$, compute $\mathsf{pad}_i := H(\mathsf{seed}, i)$
 4. Output the ciphertext $\left(\mathsf{pad}_1 + m_1, \dots, \mathsf{pad}_n + m_n\right)$
 
-This algorithm is very similar to the one published by [AlephZero](https://docs.alephzero.org/aleph-zero/protocol-details/shielder/snark-friendly-symmetric-encryption), 
-however, we arrived at it independently.
+This algorithm is very similar to the one published by [AlephZero](https://docs.alephzero.org/aleph-zero/protocol-details/shielder/snark-friendly-symmetric-encryption), however, we arrived at it independently.
