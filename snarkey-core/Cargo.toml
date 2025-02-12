@@ -7,6 +7,11 @@ edition = "2021"
 base64 = "0.13"
 hex = "0.4"
 seahash = "4.1.0"
+halo2_proofs = "0.3.0"
+halo2_gadgets = "0.3.0"
+group = "0.13"
+typenum = "1.15"
+rand = "0.8"
 
 [lib]
 name = "snarkey_core"
