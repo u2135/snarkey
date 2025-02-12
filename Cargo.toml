@@ -1,2 +1,6 @@
 [workspace]
-members = ["snarkey", "cli"]
+members = [
+    "snarkey-core",
+    "snarkey-cli"
+]   
+resolver = "2"

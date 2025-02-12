@@ -1,2 +1,4 @@
-pub mod add_chip;
-pub mod poseidon_circuit;
+pub mod encryption;
+pub mod hash;
+pub mod circuit;
+pub mod utils;

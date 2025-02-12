@@ -1,0 +1,20 @@
+[package]
+name = "snarkey-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+base64 = "0.13"
+hex = "0.4"
+seahash = "4.1.0"
+
+[lib]
+name = "snarkey_core"
+path = "src/lib.rs"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "encryption_bench"
+harness = false
