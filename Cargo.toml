@@ -1,18 +1,2 @@
-[package]
-name = "snarkey"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-halo2_proofs = "0.3.0"
-halo2_gadgets = "0.3.0"
-group = "0.13.0"
-either = "1.12.0"
-rand = "0.8.5"
-
-[dev-dependencies]
-criterion = "0.4"
-
-[[bench]]
-name = "poseidon_circuit"
-harness = false
+[workspace]
+members = ["snarkey", "cli"]
