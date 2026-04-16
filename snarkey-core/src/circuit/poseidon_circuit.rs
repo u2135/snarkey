@@ -1,3 +1,4 @@
+use crate::circuit::add_chip::{AddChip, AddConfig, AddInstruction};
 use group::ff::PrimeField;
 use halo2_proofs::{
     arithmetic::Field,
@@ -12,8 +13,6 @@ use halo2_gadgets::poseidon::{
 };
 use std::convert::TryInto;
 use std::marker::PhantomData;
-
-use crate::add_chip::{AddChip, AddConfig, AddInstruction};
 
 const L: usize = 2;
 
@@ -197,8 +196,6 @@ impl<const WIDTH: usize, const RATE: usize> Spec<Fp, WIDTH, RATE> for PoseidonSp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use either::Either;
-    use group::ff::PrimeField;
     use halo2_gadgets::poseidon::primitives as poseidon;
     use halo2_proofs::dev::MockProver;
 
@@ -211,7 +208,6 @@ mod tests {
 
     #[test]
     fn run_enc() {
-        println!("msg");
         let message = (0..MSGSIZE)
             .map(|_| Fp::one())
             .collect::<Vec<_>>()
@@ -227,26 +223,12 @@ mod tests {
             _spec: PhantomData,
         };
 
-        // Compute the encryption
-        let hasher = || poseidon::Hash::<_, S, ConstantLength<L>, WIDTH, RATE>::init();
-        let a = hasher().hash([key, nonce]);
-        let output = if message.len() == 1 {
-            Either::Left(message.map(|val| val + a).into_iter())
-        } else {
-            Either::Right(message.into_iter().enumerate().map(|(i, msg_i)| {
-                let i_ff = Fp::from_u128(i.try_into().unwrap());
-                let r_i = hasher().hash([a, i_ff]);
-                msg_i + &r_i
-            }))
-        };
+        // Native Poseidon (must match circuit spec).
+        let a = poseidon::Hash::<Fp, S, ConstantLength<L>, WIDTH, RATE>::init().hash([key, nonce]);
+        let ciphertext = message[0] + a;
+        let instance = vec![vec![ciphertext]];
 
-        // instance is of the form [[col1_inst1, col1_inst2, ...], [col2_inst1, col2_inst2], ...]
-        let output = output.map(|val| vec![val]).collect();
-
-        // Create a proof
-        println!("creating proof");
-
-        let prover = MockProver::run(K, &circuit, output).unwrap();
+        let prover = MockProver::run(K, &circuit, instance).unwrap();
         prover.verify().expect("verify");
     }
 }
