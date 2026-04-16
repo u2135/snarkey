@@ -1,34 +1,28 @@
 use halo2_proofs::pasta::Fp;
 use halo2_gadgets::poseidon::primitives::ConstantLength;
-use halo2_gadgets::poseidon::Hash;
-//use typenum::U1; // Added for hash output size as type-level integer.
-use rand::Rng;  // Import the rand crate so we can call rand::thread_rng().
+use halo2_gadgets::poseidon::primitives as poseidon;
+use rand::Rng;
 use std::marker::PhantomData;
-//use typenum::{U1, U2, U3};
 
 use crate::circuit::poseidon_circuit::{HashCircuit, PoseidonSpec};
 
-pub const WIDTH: usize = 3;
-pub const RATE: usize = 2;
-pub const MSGSIZE: usize = 1;
-pub const L: usize = 2;
+const MSGSIZE: usize = 1;
+const L: usize = 2;
 const K: u32 = 8;
 
 /// Encrypts a field element message using:
 ///     ciphertext = message + H(key, nonce)
 ///
 /// Returns (public_data, proof) where public_data = [nonce, ciphertext]
-pub fn encrypt_and_prove(message: Fp, key: Fp) -> (Vec<Fp>, Vec<u8>) {
+pub fn encrypt_and_prove<const WIDTH: usize, const RATE: usize>(message: Fp, key: Fp) -> (Vec<Fp>, Vec<u8>) {
     // 1. Sample a random nonce.
     let mut rng = rand::thread_rng();
     let nonce_val: u64 = rng.gen();
     let nonce = Fp::from(nonce_val);
 
-    // 2. Off‑circuit, compute a = H(key, nonce)
-    let hasher = || {
-        Hash::<_, PoseidonSpec<WIDTH, RATE>, ConstantLength<L>, WIDTH, RATE, MSGSIZE>::init()
-    };
-    let a = hasher().hash([key, nonce]);
+    // 2. Off-circuit: native `halo2_poseidon::Hash` (via `primitives`), not the circuit gadget.
+    let a = poseidon::Hash::<Fp, PoseidonSpec<WIDTH, RATE>, ConstantLength<L>, WIDTH, RATE>::init()
+        .hash([key, nonce]);
 
     // 3. Compute ciphertext = message + a.
     let ciphertext = message + a;
@@ -50,11 +44,7 @@ pub fn encrypt_and_prove(message: Fp, key: Fp) -> (Vec<Fp>, Vec<u8>) {
     (public_data, proof)
 }
 
-fn dummy_prove<C, const MSG: usize>(
-    circuit: &C,
-    instance: Vec<Vec<Fp>>,
-    k: u32,
-) -> Result<Vec<u8>, String>
+fn dummy_prove<C>(circuit: &C, instance: Vec<Vec<Fp>>, k: u32) -> Result<Vec<u8>, String>
 where
     C: halo2_proofs::plonk::Circuit<Fp>,
 {
